@@ -86,17 +86,78 @@ fn create_codes(code: String, mut root: Node, codes: &mut HuffmanCodes) {
     }
 }
 
+fn compress(s: &str, huffman_codes: &HuffmanCodes) -> Vec<u8> {
+    let mut compressed = Vec::new();
+    let mut buffer = 0;
+    let mut buffer_len = 0;
+
+    for c in s.chars() {
+        let code = huffman_codes.get(&(c as u8)).unwrap();
+        for bit in code.chars() {
+            buffer = (buffer << 1) | (bit.to_digit(10).unwrap() as u8);
+            buffer_len += 1;
+
+            if buffer_len == 8 {
+                compressed.push(buffer);
+                buffer = 0;
+                buffer_len = 0;
+            }
+        }
+    }
+
+    if buffer_len > 0 {
+        compressed.push(buffer << (8 - buffer_len));
+    }
+
+    compressed
+}
+
+fn decompress(compressed: &[u8], huffman_codes: &HuffmanCodes, output_len: usize) -> Vec<u8> {
+    let mut decompressed = vec![];
+    let mut buffer = String::new();
+
+    'outer: for byte in compressed {
+        for i in 0..8 {
+            let bit = (byte >> (7 - i)) & 1;
+            buffer += bit.to_string().as_str();
+
+            if let Some(symbol) = huffman_codes
+                .iter()
+                .find(|(_, code)| *code == buffer.as_str())
+            {
+                decompressed.push(*symbol.0);
+                buffer.clear();
+
+                if decompressed.len() == output_len {
+                    break 'outer;
+                }
+            }
+        }
+    }
+
+    decompressed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_generate_huffman() {
-        let test_string = "this is a test string";
+        let test_string = "jjjjjjjjjjjjjjjjjjjjjjjjjjjjhuw8hwerh8wrhv8whe8vwdhjjjjjjjjjjjj";
         let huffman_codes = generate_huffman(test_string);
+        let comressed = compress(test_string, &huffman_codes);
 
-        huffman_codes.iter().for_each(|(k, v)| {
-            println!("{}: {}", char::from(*k), v);
-        });
+        println!("{:?}", huffman_codes);
+
+        println!(
+            "{:?}",
+            test_string.as_bytes().len() as f32 / comressed.len() as f32
+        );
+
+        assert_eq!(
+            test_string.as_bytes(),
+            decompress(&comressed, &huffman_codes, test_string.len())
+        );
     }
 }
