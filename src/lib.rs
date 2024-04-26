@@ -1,10 +1,12 @@
 use std::{
     cmp::Reverse,
     collections::{BinaryHeap, HashMap},
+    fmt::Debug,
+    fmt::Formatter,
 };
 
 type NodeRef = Option<Box<Node>>;
-type HuffmanCodes = HashMap<u8, String>;
+type HuffmanCodes = HashMap<u8, HuffmanCode>;
 
 #[derive(PartialEq, Debug, Eq, Clone)]
 struct Node {
@@ -34,6 +36,37 @@ impl Node {
             weight,
             symbol: Some(symbol),
         }
+    }
+}
+
+#[derive(Default, PartialEq, Clone)]
+struct HuffmanCode {
+    code: u8,
+    len: u8,
+}
+
+impl Debug for HuffmanCode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:0width$b}", self.code, width = self.len as usize)
+    }
+}
+
+impl HuffmanCode {
+    fn push(mut self, bit: u8) -> Self {
+        self.code = (self.code << 1) | bit;
+        self.len += 1;
+        self
+    }
+
+    fn bits(&self) -> Vec<u8> {
+        (0..self.len)
+            .map(|i| (self.code >> (self.len - i - 1)) & 1)
+            .collect()
+    }
+
+    fn clear(&mut self) {
+        self.code = 0;
+        self.len = 0;
     }
 }
 
@@ -68,17 +101,17 @@ fn generate_huffman(s: &str) -> HuffmanCodes {
     };
 
     let mut huffman_codes = HashMap::new();
-    create_codes(String::new(), root.0, &mut huffman_codes);
+    create_codes(HuffmanCode::default(), root.0, &mut huffman_codes);
 
     debug_assert_eq!(heap_len, huffman_codes.len());
 
     huffman_codes
 }
 
-fn create_codes(code: String, mut root: Node, codes: &mut HuffmanCodes) {
+fn create_codes(code: HuffmanCode, mut root: Node, codes: &mut HuffmanCodes) {
     while let (Some(left), Some(right)) = (root.left.take(), root.right.take()) {
-        create_codes(code.clone() + "0", *left, codes);
-        create_codes(code.clone() + "1", *right, codes);
+        create_codes(code.clone().push(0), *left, codes);
+        create_codes(code.clone().push(1), *right, codes);
     }
 
     if let Some(symbol) = root.symbol {
@@ -93,8 +126,8 @@ fn compress(s: &str, huffman_codes: &HuffmanCodes) -> Vec<u8> {
 
     for c in s.chars() {
         let code = huffman_codes.get(&(c as u8)).unwrap();
-        for bit in code.chars() {
-            buffer = (buffer << 1) | (bit.to_digit(10).unwrap() as u8);
+        for bit in code.bits() {
+            buffer = (buffer << 1) | bit;
             buffer_len += 1;
 
             if buffer_len == 8 {
@@ -114,17 +147,14 @@ fn compress(s: &str, huffman_codes: &HuffmanCodes) -> Vec<u8> {
 
 fn decompress(compressed: &[u8], huffman_codes: &HuffmanCodes, output_len: usize) -> Vec<u8> {
     let mut decompressed = vec![];
-    let mut buffer = String::new();
+    let mut buffer = HuffmanCode::default();
 
     'outer: for byte in compressed {
         for i in 0..8 {
             let bit = (byte >> (7 - i)) & 1;
-            buffer += bit.to_string().as_str();
+            buffer = buffer.push(bit);
 
-            if let Some(symbol) = huffman_codes
-                .iter()
-                .find(|(_, code)| *code == buffer.as_str())
-            {
+            if let Some(symbol) = huffman_codes.iter().find(|(_, code)| *code == &buffer) {
                 decompressed.push(*symbol.0);
                 buffer.clear();
 
@@ -144,11 +174,13 @@ mod tests {
 
     #[test]
     fn test_generate_huffman() {
-        let test_string = "jjjjjjjjjjjjjjjjjjjjjjjjjjjjhuw8hwerh8wrhv8whe8vwdhjjjjjjjjjjjj";
+        let test_string = "huihuihyf7d6d6d64s4seseseawa23q2a4";
         let huffman_codes = generate_huffman(test_string);
         let comressed = compress(test_string, &huffman_codes);
 
-        println!("{:?}", huffman_codes);
+        huffman_codes.iter().for_each(|(k, v)| {
+            println!("{:?} {:?}", *k as char, v);
+        });
 
         println!(
             "{:?}",
